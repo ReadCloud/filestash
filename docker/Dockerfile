@@ -1,8 +1,8 @@
 # STEP1: CLONE THE CODE
 FROM alpine:latest as builder_prepare
 WORKDIR /home/
-RUN apk add git && \
-    git clone --depth 1 https://github.com/mickael-kerjean/filestash
+RUN apk add git
+COPY . ./filestash
 
 # STEP2: BUILD THE FRONTEND
 FROM node:18-alpine AS builder_frontend
@@ -14,20 +14,21 @@ RUN apk add make git gzip brotli && \
     cd public && make compress
 
 # STEP3: BUILD THE BACKEND
-FROM golang:1.19-bookworm AS builder_backend
+FROM golang:1.21-bookworm AS builder_backend
 WORKDIR /home/
 COPY --from=builder_frontend /home/ ./
 RUN apt-get update > /dev/null && \
     apt-get install -y libvips-dev curl make > /dev/null 2>&1 && \
-    apt-get install -y libjpeg-dev libtiff-dev libpng-dev libwebp-dev libraw-dev libheif-dev libgif-dev && \
-    make build_init && \
+    apt-get install -y libjpeg-dev libtiff-dev libpng-dev libwebp-dev libraw-dev libheif-dev libgif-dev
+COPY ./plg_authenticate_openid ./filestash/server/plugin/plg_authenticate_openid
+RUN make build_init && \
     make build_backend && \
     mkdir -p ./dist/data/state/config/ && \
     cp config/config.json ./dist/data/state/config/config.json
 
 # STEP4: Create the prod image from the build
 FROM debian:stable-slim
-MAINTAINER mickael@kerjean.me
+
 COPY --from=builder_backend /home/dist/ /app/
 WORKDIR "/app"
 RUN apt-get update > /dev/null && \
